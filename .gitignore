@@ -1,0 +1,36 @@
+# Credentials and local settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated code, dependencies and reports
+**/target/
+**/node_modules/
+**/dist/
+**/coverage/
+.m2/
+tmp/
+data/
+*.log
+__pycache__/
+
+# Terraform state, caches and real input values
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+*.tfvars.json
+!*.example.tfvars
+crash.log
+
+# IDE and OS files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

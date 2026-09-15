@@ -1,0 +1,118 @@
+name: docflow-cloud
+services:
+  postgres:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_DB: docflow
+      POSTGRES_USER: docflow_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docflow_dev -d docflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
+    ports: ["127.0.0.1:10000:10000", "127.0.0.1:10001:10001"]
+    volumes: ["azurite-data:/data"]
+  secret-init:
+    profiles: [app]
+    image: alpine:3.22
+    command: ["sh", "-c", "if [ ! -s /secret/document.key ]; then head -c 32 /dev/urandom | base64 > /secret/document.key && chmod 0444 /secret/document.key; fi"]
+    volumes: ["document-secret:/secret"]
+  api:
+    profiles: [app]
+    build:
+      context: ./backend
+    environment:
+      API_BIND_ADDRESS: 0.0.0.0
+      SPRING_PROFILES_ACTIVE: local
+      DB_URL: jdbc:postgresql://postgres:5432/docflow
+      DB_USER: docflow_dev
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      STORAGE_CONNECTION: &storage-connection 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;'
+      APP_DOCUMENT_SECRET_FILE: /run/secrets/document.key
+    volumes: ["document-secret:/run/secrets:ro"]
+    depends_on:
+      secret-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+    restart: on-failure
+    ports: ["127.0.0.1:8080:8080"]
+  pdf-worker:
+    profiles: [app]
+    build:
+      context: ./backend
+      args:
+        APP_MODULE: pdf-worker
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/docflow
+      DB_USER: docflow_dev
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      STORAGE_CONNECTION: *storage-connection
+      JAVA_TOOL_OPTIONS: -Xmx384m
+      DEMO_FAIL_FIRST_ATTEMPT: ${DEMO_FAIL_FIRST_ATTEMPT:-false}
+      APP_DOCUMENT_SECRET_FILE: /run/secrets/document.key
+    volumes: ["document-secret:/run/secrets:ro"]
+    depends_on:
+      secret-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+    restart: on-failure
+    mem_limit: 768m
+    cpus: 1.0
+  office-worker:
+    profiles: [app]
+    build:
+      context: ./backend
+      args:
+        APP_MODULE: office-worker
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/docflow
+      DB_USER: docflow_dev
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      STORAGE_CONNECTION: *storage-connection
+      JAVA_TOOL_OPTIONS: -Xmx384m
+    depends_on:
+      postgres:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+    restart: on-failure
+    mem_limit: 1g
+    cpus: 1.0
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.5.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=3d"]
+    ports: ["127.0.0.1:9090:9090"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:12.1.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports: ["127.0.0.1:3000:3000"]
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+volumes:
+  postgres-data:
+  azurite-data:
+  prometheus-data:
+  grafana-data:
+  document-secret:

@@ -1,0 +1,23 @@
+groups:
+  - name: docflow-demo
+    rules:
+      - alert: DocumentQueueBacklog
+        expr: docflow_queue_depth{worker_type="pdf"} > 10
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "PDF queue has more than 10 waiting jobs" }
+      - alert: DocumentWorkerUnavailable
+        expr: docflow_queue_depth{worker_type="pdf"} > 0 and docflow_worker_active{worker_type="pdf"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations: { summary: "PDF work is queued but no worker heartbeat is active" }
+      - alert: PoisonJobsDetected
+        expr: docflow_poison_jobs > 0
+        for: 30s
+        labels: { severity: warning }
+        annotations: { summary: "One or more jobs exhausted their retry limit" }
+      - alert: ElevatedDocumentFailures
+        expr: sum(docflow_jobs_failed_total) > 5
+        for: 2m
+        labels: { severity: warning }
+        annotations: { summary: "More than five document jobs have failed" }

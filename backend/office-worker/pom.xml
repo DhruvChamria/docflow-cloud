@@ -1,0 +1,5 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><parent><groupId>edu.manipal.ccd</groupId><artifactId>docflow</artifactId><version>0.1.0-SNAPSHOT</version></parent><artifactId>office-worker</artifactId><dependencies>
+<dependency><groupId>edu.manipal.ccd</groupId><artifactId>local-runtime</artifactId><version>${project.version}</version></dependency>
+<dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
+<dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
+</dependencies><build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><configuration><mainClass>edu.manipal.ccd.office.OfficeWorker</mainClass></configuration></plugin></plugins></build></project>

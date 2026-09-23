@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 export type Parameter = { name: string; label: string; type: 'text' | 'password' | 'select'; required: boolean; help: string; options: string[]; defaultValue: string };
 export type Operation = { code: string; label: string; available: boolean; inputTypes: string[]; minFiles: number; maxFiles: number; description: string; parameters: Parameter[] };
-type Job = { id: string; status: string; attempts: number; error: string | null; expiresAt: string; operation: string };
+type Job = { id: string; status: string; attempts: number; error: string | null; expiresAt: string; operation: string; outputSize: number; outputChecksum: string | null };
 const active = (job: Job) => ['CREATED', 'QUEUED', 'PROCESSING', 'RETRYING'].includes(job.status);
 const stage = (status: string) => status === 'CREATED' ? 0 : status === 'QUEUED' || status === 'RETRYING' ? 1 : status === 'PROCESSING' ? 2 : status === 'COMPLETED' ? 3 : -1;
 
@@ -17,6 +17,7 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
   const [historyError, setHistoryError] = useState('');
+  const [nextBefore, setNextBefore] = useState<string | null>(null);
   const mounted = useRef(true);
   const operation = operations.find(item => item.code === operationCode) || operations[0];
   const acceptsImages = operation.inputTypes.some(type => type.startsWith('image/'));
@@ -24,16 +25,16 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
   const acceptsText = operation.inputTypes.some(type => type.startsWith('text/'));
   const acceptsOffice = operation.inputTypes.some(type => type.includes('officedocument') || type.includes('opendocument'));
   const mixedInputs = acceptsImages && acceptsPdf;
-  const officeLabel = operation.code.includes('odt') ? 'ODT' : operation.code.includes('ods') ? 'ODS' : 'DOCX';
+  const officeLabel = operation.code.includes('pptx') ? 'PPTX' : operation.code.includes('odt') ? 'ODT' : operation.code.includes('odp') ? 'ODP' : operation.code.includes('ods') ? 'ODS' : 'DOCX';
   const acceptAttribute = acceptsText ? `${operation.inputTypes.join(',')},.txt,.md,.markdown,.html,.htm` : acceptsOffice ? `${operation.inputTypes.join(',')},.${officeLabel.toLowerCase()}` : mixedInputs ? 'application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png' : acceptsImages ? 'image/jpeg,image/png,.jpg,.jpeg,.png' : 'application/pdf,.pdf';
 
   useEffect(() => {
     mounted.current = true; let stopped = false; let timer: ReturnType<typeof setTimeout>; const controller = new AbortController();
     async function refresh() {
       try {
-        const response = await fetch('/api/v1/jobs', { signal: controller.signal });
+        const response = await fetch('/api/v1/jobs?limit=20', { signal: controller.signal });
         if (!response.ok) throw new Error('Job history unavailable. The page will retry automatically.');
-        const result: Job[] = await response.json(); if (!stopped) { setJobs(result); setHistoryError(''); }
+        const result: Job[] = await response.json(); if (!stopped) { setJobs(result); setNextBefore(response.headers?.get('X-Next-Before') || null); setHistoryError(''); }
       } catch (e) { if (!stopped) setHistoryError(e instanceof Error ? e.message : 'Connection unavailable'); }
       finally { if (!stopped) timer = setTimeout(refresh, 2000); }
     }
@@ -45,7 +46,7 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
     const isImage=(file:File)=>['image/jpeg','image/png'].includes(file.type) || /\.(jpe?g|png)$/i.test(file.name);
     const isPdf=(file:File)=>file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     const isText=(file:File)=>file.type.startsWith('text/') || /\.(txt|md|markdown|html?|xhtml)$/i.test(file.name);
-    const isOffice=(file:File)=>file.type.includes('officedocument') || file.type.includes('opendocument') || /\.(docx|odt)$/i.test(file.name);
+    const isOffice=(file:File)=>file.type.includes('officedocument') || file.type.includes('opendocument') || /\.(docx|pptx|odt|odp|ods)$/i.test(file.name);
     const accepted = selected.filter(file => (acceptsImages&&isImage(file))||(acceptsPdf&&isPdf(file))||(acceptsText&&isText(file))||(acceptsOffice&&isOffice(file)));
     setFiles(previous => operation.maxFiles === 1 ? accepted.slice(0, 1) : [...previous, ...accepted].slice(0, operation.maxFiles));
     setError(accepted.length !== selected.length ? `Only ${acceptsText ? 'text files' : acceptsOffice ? `${officeLabel} files` : mixedInputs ? 'PDF, JPG and PNG files' : acceptsImages ? 'JPG and PNG images' : 'PDF files'} are accepted for this operation.` : '');
@@ -89,6 +90,16 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
     setError('');const response=await fetch(`/api/v1/jobs/${job.id}`,{method:'DELETE',headers:{'X-Requested-With':'docflow'}});
     if(!response.ok){const problem=await response.json().catch(()=>({}));setError(problem.detail||'Job deletion failed.');return;}
     setJobs(previous=>previous.filter(item=>item.id!==job.id));
+  }
+  async function loadOlder() {
+    if(!nextBefore)return;setHistoryError('');
+    try {
+      const response=await fetch(`/api/v1/jobs?limit=20&before=${encodeURIComponent(nextBefore)}`);
+      if(!response.ok)throw new Error('Older job history is temporarily unavailable.');
+      const older:Job[]=await response.json();
+      setJobs(previous=>[...previous,...older.filter(candidate=>!previous.some(existing=>existing.id===candidate.id))]);
+      setNextBefore(response.headers.get('X-Next-Before'));
+    } catch(failure) { setHistoryError(failure instanceof Error?failure.message:'Older job history is temporarily unavailable.'); }
   }
 
   function move(index: number, delta: number) { const copy = [...files]; [copy[index], copy[index + delta]] = [copy[index + delta], copy[index]]; setFiles(copy); }
@@ -136,8 +147,10 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
       {job.status === 'FAILED' && <span className="error">{job.error === 'INVALID_PAGE_OPTIONS' ? 'Page selection does not fit this PDF.' : job.error === 'INVALID_OR_UNSUPPORTED_PDF' ? 'Invalid, encrypted, or overly large PDF.' : job.error === 'UPLOAD_FAILED' ? 'Upload failed. Please try again.' : 'Processing failed after recovery attempts.'}</span>}
       {job.status === 'CANCELLED' && <span>Cancelled; temporary files are being removed.</span>}
       {job.status === 'COMPLETED' && Date.parse(job.expiresAt) > Date.now() && <a href={`/api/v1/jobs/${job.id}/download`}>Download result</a>}
+      {job.status === 'COMPLETED' && job.outputSize > 0 && <small>Result: {(job.outputSize/1024).toFixed(1)} KiB · SHA-256 {job.outputChecksum?.slice(0,12)}…</small>}
       {job.status === 'EXPIRED' && <span>Files removed</span>}
       {!active(job)&&job.status!=='EXPIRED'&&<button className="secondary" onClick={()=>void remove(job)}>Delete job and files</button>}
     </article>)}</div>
+    {nextBefore&&<button className="secondary" onClick={()=>void loadOlder()}>Load older jobs</button>}
   </section>;
 }

@@ -35,6 +35,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       STORAGE_CONNECTION: &storage-connection 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;'
       APP_DOCUMENT_SECRET_FILE: /run/secrets/document.key
+      APP_JOBS_MAX_ACTIVE_PER_OWNER: ${APP_JOBS_MAX_ACTIVE_PER_OWNER:-5}
+      APP_RATE_LIMIT_JOB_MUTATIONS_PER_MINUTE: ${APP_RATE_LIMIT_JOB_MUTATIONS_PER_MINUTE:-120}
+      APP_RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE: ${APP_RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE:-30}
     volumes: ["document-secret:/run/secrets:ro"]
     depends_on:
       secret-init:
@@ -45,6 +48,10 @@ services:
         condition: service_started
     restart: on-failure
     ports: ["127.0.0.1:8080:8080"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=128m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
   pdf-worker:
     profiles: [app]
     build:
@@ -70,6 +77,10 @@ services:
     restart: on-failure
     mem_limit: 768m
     cpus: 1.0
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=768m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
   office-worker:
     profiles: [app]
     build:
@@ -77,6 +88,8 @@ services:
       args:
         APP_MODULE: office-worker
     environment:
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/.cache
       DB_URL: jdbc:postgresql://postgres:5432/docflow
       DB_USER: docflow_dev
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
@@ -90,6 +103,10 @@ services:
     restart: on-failure
     mem_limit: 1g
     cpus: 1.0
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=1g"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
   prometheus:
     profiles: [observability]
     image: prom/prometheus:v3.5.0

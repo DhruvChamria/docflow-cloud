@@ -1,5 +1,6 @@
 param([switch]$AllowServiceInterruption)
 $ErrorActionPreference='Stop'
+Add-Type -AssemblyName System.Net.Http
 if(-not $AllowServiceInterruption){throw 'Pass -AllowServiceInterruption to recreate the PDF worker for this deterministic demo.'}
 $projectDirectory=Split-Path $PSScriptRoot -Parent
 $docker=Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe'

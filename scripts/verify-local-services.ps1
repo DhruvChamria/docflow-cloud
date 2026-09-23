@@ -31,7 +31,11 @@ try {
         throw 'Prometheus API target is not UP yet. Wait for the next scrape and retry.'
     }
     Write-Output 'PASS: Prometheus scrapes the API container.'
-    & $dockerExe compose exec -T azurite node -e 'const net=require("net"); for (const port of [10000,10001]) { const s=net.connect(port,"127.0.0.1",()=>{console.log("PASS: Azurite listener "+port);s.end();}); s.setTimeout(5000,()=>{s.destroy();process.exitCode=1;}); s.on("error",()=>{process.exitCode=1;}); }'
-    if ($LASTEXITCODE -ne 0) { throw 'Azurite listeners failed.' }
+    foreach ($port in @(10000, 10001)) {
+        if (-not (Test-NetConnection -ComputerName '127.0.0.1' -Port $port -InformationLevel Quiet)) {
+            throw "Azurite listener failed: $port"
+        }
+        Write-Output "PASS: Azurite listener $port"
+    }
     Write-Output 'PASS: local foundation service checks. This does not test document processing or authenticated storage operations.'
 } finally { Pop-Location }

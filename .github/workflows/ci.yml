@@ -33,6 +33,9 @@ jobs:
       - name: Install locked dependencies
         working-directory: frontend
         run: npm ci
+      - name: Test frontend
+        working-directory: frontend
+        run: npm test
       - name: Typecheck and build
         working-directory: frontend
         run: npm run build
@@ -45,3 +48,48 @@ jobs:
         run: cp .env.example .env
       - name: Validate Compose profiles
         run: docker compose --profile app --profile observability config --quiet
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan dependencies, secrets, and configuration
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Create non-secret CI environment
+        run: cp .env.example .env
+      - name: Build application images
+        run: docker compose --profile app build api pdf-worker office-worker
+      - name: Scan API image
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: docflow-cloud-api:latest
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan PDF worker image
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: docflow-cloud-pdf-worker:latest
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan Office worker image
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          scan-type: image
+          image-ref: docflow-cloud-office-worker:latest
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'

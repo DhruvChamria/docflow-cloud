@@ -13,7 +13,7 @@ RUN if [ "$APP_MODULE" = "pdf-worker" ]; then \
       apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ghostscript && \
       rm -rf /var/lib/apt/lists/*; \
     elif [ "$APP_MODULE" = "office-worker" ]; then \
-      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc && \
+      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libreoffice-writer libreoffice-calc libreoffice-impress && \
       rm -rf /var/lib/apt/lists/*; \
     fi
 WORKDIR /app

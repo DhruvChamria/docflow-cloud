@@ -5,6 +5,7 @@ import java.util.*;
 import java.io.*;
 import java.time.Instant;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,10 +15,13 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 @Profile("local")
 @RequestMapping("/api/v1")
 class JobsController {
-    private final JobStore jobs; private final Storage storage; private final Identity identities;private final SecretBox secrets;
-    JobsController(JobStore jobs,Storage storage,Identity identities,SecretBox secrets) { this.jobs=jobs;this.storage=storage;this.identities=identities;this.secrets=secrets; }
-    record View(UUID id,String status,int attempts,String error,Instant expiresAt,String operation) {}
-    private View view(JobStore.Job job) { return new View(job.id(),job.status(),job.attempts(),job.error(),job.expires(),job.operation()); }
+    private final JobStore jobs; private final Storage storage; private final Identity identities;private final SecretBox secrets;private final int maxActiveJobs;
+    JobsController(JobStore jobs,Storage storage,Identity identities,SecretBox secrets,
+                   @Value("${app.jobs.max-active-per-owner:5}") int maxActiveJobs) {
+        this.jobs=jobs;this.storage=storage;this.identities=identities;this.secrets=secrets;this.maxActiveJobs=maxActiveJobs;
+    }
+    record View(UUID id,String status,int attempts,String error,Instant expiresAt,String operation,long outputSize,String outputChecksum) {}
+    private View view(JobStore.Job job) { return new View(job.id(),job.status(),job.attempts(),job.error(),job.expires(),job.operation(),job.outputSize(),job.outputChecksum()); }
     @PostMapping(value="/jobs",consumes=MediaType.MULTIPART_FORM_DATA_VALUE)
     ResponseEntity<View> submit(@RequestParam("files") List<MultipartFile> files,
         @RequestParam(defaultValue="pdf.merge") String operation,
@@ -64,12 +68,21 @@ class JobsController {
             try(var input=file.getInputStream()) {
                 byte[] header=input.readNBytes(12);
                 boolean expectsImage=operation.equals("convert.image_to_pdf")||(operation.equals("pdf.watermark_image")&&fileIndex==1);
-                boolean expectsDocx=operation.equals("convert.docx_to_pdf"),expectsOdt=operation.equals("convert.odt_to_pdf"),expectsOds=operation.equals("convert.ods_to_pdf");
-                boolean valid=textConversion?isUtf8Text(file):expectsImage?isImage(header):expectsDocx?isDocx(file):expectsOdt?isOpenDocument(file,"application/vnd.oasis.opendocument.text"):expectsOds?isOpenDocument(file,"application/vnd.oasis.opendocument.spreadsheet"):startsWith(header,"%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-                if(!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,textConversion?"Expected valid UTF-8 text":expectsImage?"Expected a JPG or PNG image":expectsDocx?"Expected a valid DOCX package":expectsOdt?"Expected a valid ODT package":expectsOds?"Expected a valid ODS package":"Expected a PDF");
+                var officeFormat=switch(operation) {
+                    case "convert.docx_to_pdf" -> OfficePackageValidator.Format.DOCX;
+                    case "convert.pptx_to_pdf" -> OfficePackageValidator.Format.PPTX;
+                    case "convert.odt_to_pdf" -> OfficePackageValidator.Format.ODT;
+                    case "convert.odp_to_pdf" -> OfficePackageValidator.Format.ODP;
+                    case "convert.ods_to_pdf" -> OfficePackageValidator.Format.ODS;
+                    default -> null;
+                };
+                boolean valid=textConversion?isUtf8Text(file):expectsImage?isImage(header):officeFormat!=null?OfficePackageValidator.valid(file,officeFormat):startsWith(header,"%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                if(!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,textConversion?"Expected valid UTF-8 text":expectsImage?"Expected a JPG or PNG image":officeFormat!=null?"Expected a valid "+officeFormat.name()+" package":"Expected a PDF");
             }
         }
         String owner=identities.owner(request,response,true);
+        if(jobs.activeCount(owner)>=maxActiveJobs)
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,"Finish or cancel an active job before submitting another");
         UUID id=UUID.randomUUID();
         // Reserve metadata before the first blob so interrupted uploads remain discoverable for cleanup.
         jobs.beginUpload(id,owner,files.size(),options,UUID.fromString((String)request.getAttribute(RequestCorrelationFilter.ATTRIBUTE)));
@@ -96,8 +109,13 @@ class JobsController {
         return job;
     }
     @GetMapping("/jobs")
-    List<View> history(HttpServletRequest request,HttpServletResponse response) {
-        return identities.ownerIfPresent(request).map(owner->jobs.history(owner).stream().map(this::view).toList()).orElse(List.of());
+    ResponseEntity<List<View>> history(@RequestParam(defaultValue="20") int limit,@RequestParam(required=false) Instant before,
+                                      HttpServletRequest request,HttpServletResponse response) {
+        if(limit<1||limit>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"History limit must be between 1 and 100");
+        var result=identities.ownerIfPresent(request).map(owner->jobs.history(owner,limit,before)).orElse(List.of());
+        var builder=ResponseEntity.ok();
+        if(result.size()==limit)builder.header("X-Next-Before",result.get(result.size()-1).created().toString());
+        return builder.body(result.stream().map(this::view).toList());
     }
     @GetMapping("/jobs/{id}")
     View status(@PathVariable UUID id,HttpServletRequest request,HttpServletResponse response) { return view(owned(id,request,response)); }
@@ -126,10 +144,12 @@ class JobsController {
     ResponseEntity<StreamingResponseBody> download(@PathVariable UUID id,HttpServletRequest request,HttpServletResponse response) {
         var job=owned(id,request,response);
         if(!job.status().equals("COMPLETED")) throw new ResponseStatusException(HttpStatus.CONFLICT,"Result is not ready");
-        return ResponseEntity.ok().contentType(resultType(job.operation()))
+        var builder=ResponseEntity.ok().contentType(resultType(job.operation()))
             .header("Content-Disposition","attachment; filename=\""+resultName(job.operation())+"\"")
-            .header("X-Content-Type-Options","nosniff")
-            .body(output->{try(var input=storage.open(job.output())) { input.transferTo(output); }});
+            .header("X-Content-Type-Options","nosniff");
+        if(job.outputSize()>0)builder.contentLength(job.outputSize());
+        if(job.outputChecksum()!=null&&job.outputChecksum().matches("[a-f0-9]{64}"))builder.header("X-Checksum-SHA256",job.outputChecksum());
+        return builder.body(output->{try(var input=storage.open(job.output())) { input.transferTo(output); }});
     }
     private String resultName(String operation) {
         return switch(operation) {
@@ -149,7 +169,9 @@ class JobsController {
             case "convert.markdown_to_pdf" -> "markdown-document.pdf";
             case "convert.html_to_pdf" -> "html-document.pdf";
             case "convert.docx_to_pdf" -> "word-document.pdf";
+            case "convert.pptx_to_pdf" -> "presentation.pdf";
             case "convert.odt_to_pdf" -> "open-document.pdf";
+            case "convert.odp_to_pdf" -> "open-presentation.pdf";
             case "convert.ods_to_pdf" -> "spreadsheet.pdf";
             case "pdf.render_images" -> "rendered-pages.zip";
             case "pdf.extract_text" -> "extracted-text.txt";
@@ -183,27 +205,5 @@ class JobsController {
             java.nio.charset.StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                 .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes));return true;
         } catch(Exception invalid) { return false; }
-    }
-    private static boolean isDocx(MultipartFile file) {
-        boolean contentTypes=false,document=false;
-        try(var zip=new java.util.zip.ZipInputStream(file.getInputStream())) {
-            for(java.util.zip.ZipEntry entry;(entry=zip.getNextEntry())!=null;) {
-                if(entry.getName().equals("[Content_Types].xml"))contentTypes=true;
-                if(entry.getName().equals("word/document.xml"))document=true;
-                if(contentTypes&&document)return true;
-            }
-        } catch(Exception invalid) { return false; }
-        return false;
-    }
-    private static boolean isOpenDocument(MultipartFile file,String expectedMime) {
-        boolean content=false,manifest=false,mimetype=false;
-        try(var zip=new java.util.zip.ZipInputStream(file.getInputStream())) {
-            for(java.util.zip.ZipEntry entry;(entry=zip.getNextEntry())!=null;) {
-                if(entry.getName().equals("content.xml"))content=true;
-                else if(entry.getName().equals("META-INF/manifest.xml"))manifest=true;
-                else if(entry.getName().equals("mimetype"))mimetype=new String(zip.readNBytes(100),java.nio.charset.StandardCharsets.US_ASCII).equals(expectedMime);
-            }
-        } catch(Exception invalid) { return false; }
-        return content&&manifest&&mimetype;
     }
 }

@@ -71,8 +71,12 @@ class OperationsController {
                 "Remove encryption using the correct existing PDF password.",List.of(new ParameterInfo("documentPassword","Current password","password",true,"The temporary password is encrypted and erased after processing.",List.of(),""))),
             new OperationInfo("convert.docx_to_pdf", "Word to PDF", environment.matchesProfiles("local"),
                 List.of("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),1,1,"Convert a DOCX file using the isolated, resource-limited LibreOffice worker.",List.of()),
+            new OperationInfo("convert.pptx_to_pdf", "PowerPoint to PDF", environment.matchesProfiles("local"),
+                List.of("application/vnd.openxmlformats-officedocument.presentationml.presentation"),1,1,"Convert a PPTX file using the isolated, resource-limited LibreOffice worker.",List.of()),
             new OperationInfo("convert.odt_to_pdf", "ODT to PDF", environment.matchesProfiles("local"),
                 List.of("application/vnd.oasis.opendocument.text"),1,1,"Convert an OpenDocument Text file using the isolated, resource-limited LibreOffice worker.",List.of()),
+            new OperationInfo("convert.odp_to_pdf", "ODP to PDF", environment.matchesProfiles("local"),
+                List.of("application/vnd.oasis.opendocument.presentation"),1,1,"Convert an OpenDocument Presentation using the isolated, resource-limited LibreOffice worker.",List.of()),
             new OperationInfo("convert.ods_to_pdf", "ODS to PDF", environment.matchesProfiles("local"),
                 List.of("application/vnd.oasis.opendocument.spreadsheet"),1,1,"Convert an OpenDocument Spreadsheet using the isolated, resource-limited LibreOffice worker.",List.of()));
     }

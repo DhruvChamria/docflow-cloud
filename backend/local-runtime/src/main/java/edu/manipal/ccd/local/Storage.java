@@ -8,8 +8,13 @@ import com.azure.core.util.Context;
 import java.nio.file.*;
 import java.io.*;
 import java.time.Duration;
+import java.security.MessageDigest;
+import java.security.DigestInputStream;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 
 public class Storage {
+    public record StoredObject(long size,String sha256) {}
     public final BlobContainerClient blobs;
     public final QueueClient queue;
     public final QueueClient officeQueue;
@@ -27,8 +32,12 @@ public class Storage {
     public void put(String key, InputStream data, long length) {
         blobs.getBlobClient(key).upload(data, length, false);
     }
-    public void upload(String key, Path file) throws IOException {
-        try (var stream=Files.newInputStream(file)) { put(key, stream, Files.size(file)); }
+    public StoredObject upload(String key, Path file) throws IOException {
+        long size=Files.size(file);
+        try (var stream=new DigestInputStream(Files.newInputStream(file),sha256())) {
+            put(key, stream, size);
+            return new StoredObject(size,HexFormat.of().formatHex(stream.getMessageDigest().digest()));
+        }
     }
     public InputStream open(String key) { return blobs.getBlobClient(key).openInputStream(); }
     public void download(String key, Path file) { blobs.getBlobClient(key).downloadToFile(file.toString()); }
@@ -44,5 +53,9 @@ public class Storage {
     private QueueMessageItem receive(QueueClient target) {
         return target.receiveMessages(1, Duration.ofSeconds(120), Duration.ofSeconds(10), Context.NONE)
             .stream().findFirst().orElse(null);
+    }
+    private static MessageDigest sha256() {
+        try { return MessageDigest.getInstance("SHA-256"); }
+        catch(NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 }

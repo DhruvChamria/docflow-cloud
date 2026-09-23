@@ -48,6 +48,17 @@ class LocalPipelineTest {
         }
         return bytes.toByteArray();
     }
+    static byte[] pptx() throws Exception {
+        var bytes=new ByteArrayOutputStream();
+        try(var presentation=new org.apache.poi.xslf.usermodel.XMLSlideShow()) {
+            presentation.setPageSize(new java.awt.Dimension(960,540));
+            var textBox=presentation.createSlide().createTextBox();
+            textBox.setAnchor(new java.awt.geom.Rectangle2D.Double(80,80,800,100));
+            textBox.setText("DocFlow Presentation conversion");
+            presentation.write(bytes);
+        }
+        return bytes.toByteArray();
+    }
     static byte[] odt() throws Exception {
         var bytes=new ByteArrayOutputStream();
         try(var zip=new java.util.zip.ZipOutputStream(bytes)) {
@@ -67,6 +78,17 @@ class LocalPipelineTest {
             var entries=Map.of(
                 "META-INF/manifest.xml","<?xml version=\"1.0\" encoding=\"UTF-8\"?><manifest:manifest xmlns:manifest=\"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0\" manifest:version=\"1.2\"><manifest:file-entry manifest:full-path=\"/\" manifest:media-type=\"application/vnd.oasis.opendocument.spreadsheet\"/><manifest:file-entry manifest:full-path=\"content.xml\" manifest:media-type=\"text/xml\"/></manifest:manifest>",
                 "content.xml","<?xml version=\"1.0\" encoding=\"UTF-8\"?><office:document-content xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" xmlns:table=\"urn:oasis:names:tc:opendocument:xmlns:table:1.0\" xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\" office:version=\"1.2\"><office:body><office:spreadsheet><table:table table:name=\"Sheet1\"><table:table-row><table:table-cell office:value-type=\"string\"><text:p>DocFlow Spreadsheet conversion</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>");
+            for(var entry:entries.entrySet()){zip.putNextEntry(new java.util.zip.ZipEntry(entry.getKey()));zip.write(entry.getValue().getBytes(StandardCharsets.UTF_8));zip.closeEntry();}
+        } return bytes.toByteArray();
+    }
+    static byte[] odp() throws Exception {
+        var bytes=new ByteArrayOutputStream();
+        try(var zip=new java.util.zip.ZipOutputStream(bytes)) {
+            byte[] mime="application/vnd.oasis.opendocument.presentation".getBytes(StandardCharsets.US_ASCII);
+            var mimeEntry=new java.util.zip.ZipEntry("mimetype");mimeEntry.setMethod(java.util.zip.ZipEntry.STORED);mimeEntry.setSize(mime.length);mimeEntry.setCompressedSize(mime.length);var crc=new java.util.zip.CRC32();crc.update(mime);mimeEntry.setCrc(crc.getValue());zip.putNextEntry(mimeEntry);zip.write(mime);zip.closeEntry();
+            var entries=Map.of(
+                "META-INF/manifest.xml","<?xml version=\"1.0\" encoding=\"UTF-8\"?><manifest:manifest xmlns:manifest=\"urn:oasis:names:tc:opendocument:xmlns:manifest:1.0\" manifest:version=\"1.2\"><manifest:file-entry manifest:full-path=\"/\" manifest:media-type=\"application/vnd.oasis.opendocument.presentation\"/><manifest:file-entry manifest:full-path=\"content.xml\" manifest:media-type=\"text/xml\"/></manifest:manifest>",
+                "content.xml","<?xml version=\"1.0\" encoding=\"UTF-8\"?><office:document-content xmlns:office=\"urn:oasis:names:tc:opendocument:xmlns:office:1.0\" xmlns:draw=\"urn:oasis:names:tc:opendocument:xmlns:drawing:1.0\" xmlns:presentation=\"urn:oasis:names:tc:opendocument:xmlns:presentation:1.0\" xmlns:text=\"urn:oasis:names:tc:opendocument:xmlns:text:1.0\" xmlns:svg=\"urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0\" office:version=\"1.2\"><office:body><office:presentation><draw:page draw:name=\"page1\"><draw:frame svg:x=\"2cm\" svg:y=\"2cm\" svg:width=\"20cm\" svg:height=\"3cm\"><draw:text-box><text:p>DocFlow OpenDocument presentation</text:p></draw:text-box></draw:frame></draw:page></office:presentation></office:body></office:document-content>");
             for(var entry:entries.entrySet()){zip.putNextEntry(new java.util.zip.ZipEntry(entry.getKey()));zip.write(entry.getValue().getBytes(StandardCharsets.UTF_8));zip.closeEntry();}
         } return bytes.toByteArray();
     }
@@ -126,12 +148,16 @@ class LocalPipelineTest {
         assertTrue(accepted.headers().firstValue("set-cookie").orElse("").contains("HttpOnly"));
         assertEquals(404,get(HttpClient.newHttpClient(),"/api/v1/jobs/"+id).statusCode());
         assertEquals(404,get(HttpClient.newHttpClient(),"/api/v1/jobs/"+id+"/download").statusCode());
-        await(id,"COMPLETED");
+        var completed=await(id,"COMPLETED");
         var outsider=HttpClient.newHttpClient();
         var otherGuest=HttpRequest.newBuilder(URI.create(base+"/api/v1/jobs/"+id))
             .header("Cookie","docflow_guest="+"a".repeat(64)).build();
         assertEquals(404,outsider.send(otherGuest,HttpResponse.BodyHandlers.ofByteArray()).statusCode());
         var download=get(client,"/api/v1/jobs/"+id+"/download");assertEquals(200,download.statusCode());
+        assertEquals(download.body().length,completed.path("outputSize").asLong());
+        assertEquals(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(download.body())),completed.path("outputChecksum").asText());
+        var firstPage=get(client,"/api/v1/jobs?limit=1");assertEquals(200,firstPage.statusCode());
+        assertEquals(1,JSON.readTree(firstPage.body()).size());assertTrue(firstPage.headers().firstValue("X-Next-Before").isPresent());
         try(var merged=Loader.loadPDF(download.body())) {
             assertEquals(2,merged.getNumberOfPages());
             assertEquals(org.apache.pdfbox.pdmodel.common.PDRectangle.A4.getWidth(),merged.getPage(0).getMediaBox().getWidth());
@@ -256,14 +282,22 @@ class LocalPipelineTest {
         var office=submit(List.of(docx()),Map.of("operation","convert.docx_to_pdf"),true);
         assertEquals(202,office.statusCode(),new String(office.body()));String officeId=JSON.readTree(office.body()).path("id").asText();await(officeId,"COMPLETED");
         try(var pdf=Loader.loadPDF(get(client,"/api/v1/jobs/"+officeId+"/download").body())) { assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("DocFlow Office conversion")); }
+        var presentation=submit(List.of(pptx()),Map.of("operation","convert.pptx_to_pdf"),true);
+        assertEquals(202,presentation.statusCode(),new String(presentation.body()));String pptxId=JSON.readTree(presentation.body()).path("id").asText();await(pptxId,"COMPLETED");
+        try(var pdf=Loader.loadPDF(get(client,"/api/v1/jobs/"+pptxId+"/download").body())) { assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("DocFlow Presentation conversion")); }
         var openDocument=submit(List.of(odt()),Map.of("operation","convert.odt_to_pdf"),true);
         assertEquals(202,openDocument.statusCode(),new String(openDocument.body()));String odtId=JSON.readTree(openDocument.body()).path("id").asText();await(odtId,"COMPLETED");
         try(var pdf=Loader.loadPDF(get(client,"/api/v1/jobs/"+odtId+"/download").body())) { assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("DocFlow OpenDocument conversion")); }
+        var openPresentation=submit(List.of(odp()),Map.of("operation","convert.odp_to_pdf"),true);
+        assertEquals(202,openPresentation.statusCode(),new String(openPresentation.body()));String odpId=JSON.readTree(openPresentation.body()).path("id").asText();await(odpId,"COMPLETED");
+        try(var pdf=Loader.loadPDF(get(client,"/api/v1/jobs/"+odpId+"/download").body())) { assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("DocFlow OpenDocument presentation")); }
         var spreadsheet=submit(List.of(ods()),Map.of("operation","convert.ods_to_pdf"),true);
         assertEquals(202,spreadsheet.statusCode(),new String(spreadsheet.body()));String odsId=JSON.readTree(spreadsheet.body()).path("id").asText();await(odsId,"COMPLETED");
         try(var pdf=Loader.loadPDF(get(client,"/api/v1/jobs/"+odsId+"/download").body())) { assertTrue(new org.apache.pdfbox.text.PDFTextStripper().getText(pdf).contains("DocFlow Spreadsheet conversion")); }
         assertEquals(400,submit(List.of("not a docx".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.docx_to_pdf"),true).statusCode());
+        assertEquals(400,submit(List.of("not a pptx".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.pptx_to_pdf"),true).statusCode());
         assertEquals(400,submit(List.of("not an odt".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.odt_to_pdf"),true).statusCode());
+        assertEquals(400,submit(List.of("not an odp".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.odp_to_pdf"),true).statusCode());
         assertEquals(400,submit(List.of("not an ods".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.ods_to_pdf"),true).statusCode());
         assertEquals(400,submit(List.of(new byte[]{(byte)0xc3,0x28}),Map.of("operation","convert.text_to_pdf"),true).statusCode());
         assertEquals(400,submit(List.of("not-image".getBytes(StandardCharsets.UTF_8)),Map.of("operation","convert.image_to_pdf"),true).statusCode());
@@ -280,7 +314,7 @@ class LocalPipelineTest {
             assertTrue(isolated.claim(id,owner,initial.dispatch()).isEmpty());
             assertTrue(isolated.find(id,"another-owner").isEmpty());
             isolated.fail(attempt,true,"TEST_TRANSIENT");
-            assertFalse(isolated.complete(attempt,"stale.pdf"));
+            assertFalse(isolated.complete(attempt,"stale.pdf",1,"0".repeat(64)));
             assertFalse(isolated.pending().stream().anyMatch(j->j.id().equals(id)),"Retry must wait for backoff");
             for(int i=2;i<=3;i++) {
                 new JdbcTemplate(source).update("UPDATE merge_jobs SET retry_at=now()-interval '1 second' WHERE id=?",id);
@@ -296,7 +330,7 @@ class LocalPipelineTest {
             var stale=isolated.claim(recoverId,owner,queued.dispatch()).orElseThrow();
             new JdbcTemplate(source).update("UPDATE merge_jobs SET lease_until=now()-interval '1 second' WHERE id=?",recoverId);
             assertFalse(isolated.renew(stale));
-            assertFalse(isolated.complete(stale,"late.pdf"));
+            assertFalse(isolated.complete(stale,"late.pdf",1,"0".repeat(64)));
             isolated.recover();
             assertEquals("RETRYING",isolated.find(recoverId,owner).orElseThrow().status());
             new JdbcTemplate(source).update("UPDATE merge_jobs SET retry_at=now()-interval '1 second' WHERE id=?",recoverId);

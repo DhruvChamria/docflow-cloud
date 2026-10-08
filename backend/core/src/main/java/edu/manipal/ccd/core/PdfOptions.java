@@ -7,7 +7,7 @@ public record PdfOptions(String operation,String pages,int angle,int copies,int 
                          String text,String position,int startNumber,int fontSize,double opacity) {
     private static final Set<String> OPERATIONS=Set.of("pdf.merge","pdf.split","pdf.extract","pdf.rotate","pdf.reorder","pdf.delete",
         "pdf.duplicate_pages","pdf.insert_blank","pdf.page_numbers","pdf.watermark_text",
-        "pdf.render_images","pdf.extract_text","convert.image_to_pdf","convert.text_to_pdf","convert.markdown_to_pdf","convert.html_to_pdf","convert.docx_to_pdf","convert.odt_to_pdf","convert.ods_to_pdf",
+        "pdf.render_images","pdf.extract_text","convert.image_to_pdf","convert.text_to_pdf","convert.markdown_to_pdf","convert.html_to_pdf","convert.docx_to_pdf","convert.pptx_to_pdf","convert.odt_to_pdf","convert.odp_to_pdf","convert.ods_to_pdf",
         "pdf.watermark_image","pdf.metadata_read","pdf.metadata_update","pdf.metadata_remove","pdf.optimize","pdf.compress","pdf.protect","pdf.unlock");
     private static final Set<String> POSITIONS=Set.of("TOP_LEFT","TOP_RIGHT","BOTTOM_LEFT","BOTTOM_CENTER","BOTTOM_RIGHT","CENTER");
 
@@ -55,7 +55,7 @@ public record PdfOptions(String operation,String pages,int angle,int copies,int 
                 if(!Set.of("A4","LETTER").contains(pageSize)) throw new IllegalArgumentException("Page size must be A4 or LETTER");
                 if(fontSize<8||fontSize>24) throw new IllegalArgumentException("Font size must be between 8 and 24");
             }
-            case "convert.docx_to_pdf","convert.odt_to_pdf","convert.ods_to_pdf" -> { if(!pages.isEmpty()||angle!=0||!text.isEmpty()) throw new IllegalArgumentException("Office conversion does not accept PDF options"); }
+            case "convert.docx_to_pdf","convert.pptx_to_pdf","convert.odt_to_pdf","convert.odp_to_pdf","convert.ods_to_pdf" -> { if(!pages.isEmpty()||angle!=0||!text.isEmpty()) throw new IllegalArgumentException("Office conversion does not accept PDF options"); }
             case "pdf.watermark_image" -> {
                 if(!POSITIONS.contains(position)) throw new IllegalArgumentException("Unsupported image-watermark position");
                 if(fontSize<5||fontSize>90) throw new IllegalArgumentException("Image width must be between 5 and 90 percent");

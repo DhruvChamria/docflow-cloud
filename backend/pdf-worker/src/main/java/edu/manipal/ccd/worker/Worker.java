@@ -10,9 +10,11 @@ import org.slf4j.LoggerFactory;
 
 public class Worker {
     private static final org.slf4j.Logger log=LoggerFactory.getLogger(Worker.class);
+    private static final Set<String> OFFICE_OPERATIONS=Set.of("convert.docx_to_pdf","convert.pptx_to_pdf","convert.odt_to_pdf","convert.odp_to_pdf","convert.ods_to_pdf");
     private static String env(String name) { return Objects.requireNonNull(System.getenv(name),name+" is required"); }
     private static boolean demoFailureEnabled() { return Boolean.parseBoolean(System.getenv().getOrDefault("DEMO_FAIL_FIRST_ATTEMPT","false")); }
     private static void clearContext() { org.slf4j.MDC.remove("correlationId");org.slf4j.MDC.remove("jobId");org.slf4j.MDC.remove("operation"); }
+    static boolean isOfficeOperation(String operation) { return OFFICE_OPERATIONS.contains(operation); }
     public static void main(String[] args) throws Exception {
         var jobs=new JobStore(env("DB_URL"),env("DB_USER"),env("DB_PASSWORD"));
         var storage=new Storage(env("STORAGE_CONNECTION"));
@@ -26,7 +28,7 @@ public class Worker {
                 var cleaned=cleanup.run();
                 if(cleaned.failed()>0) log.warn("Expiry cleanup will retry {} jobs",cleaned.failed());
                 for (var job:jobs.pending()) {
-                    var target=Set.of("convert.docx_to_pdf","convert.odt_to_pdf","convert.ods_to_pdf").contains(job.operation())?storage.officeQueue:storage.queue;
+                    var target=isOfficeOperation(job.operation())?storage.officeQueue:storage.queue;
                     target.sendMessage(json.writeValueAsString(Map.of("jobId",job.id().toString(),
                         "ownerKey",job.owner(),"dispatchId",job.dispatch().toString(),"correlationId",job.correlation().toString(),"schemaVersion",1)));
                     jobs.sent(job);

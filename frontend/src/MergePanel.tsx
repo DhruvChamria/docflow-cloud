@@ -24,7 +24,7 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
   const acceptsText = operation.inputTypes.some(type => type.startsWith('text/'));
   const acceptsOffice = operation.inputTypes.some(type => type.includes('officedocument') || type.includes('opendocument'));
   const mixedInputs = acceptsImages && acceptsPdf;
-  const officeLabel = operation.code.includes('odt') ? 'ODT' : operation.code.includes('ods') ? 'ODS' : 'DOCX';
+  const officeLabel = operation.code.includes('pptx') ? 'PPTX' : operation.code.includes('odt') ? 'ODT' : operation.code.includes('odp') ? 'ODP' : operation.code.includes('ods') ? 'ODS' : 'DOCX';
   const acceptAttribute = acceptsText ? `${operation.inputTypes.join(',')},.txt,.md,.markdown,.html,.htm` : acceptsOffice ? `${operation.inputTypes.join(',')},.${officeLabel.toLowerCase()}` : mixedInputs ? 'application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png' : acceptsImages ? 'image/jpeg,image/png,.jpg,.jpeg,.png' : 'application/pdf,.pdf';
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
     const isImage=(file:File)=>['image/jpeg','image/png'].includes(file.type) || /\.(jpe?g|png)$/i.test(file.name);
     const isPdf=(file:File)=>file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     const isText=(file:File)=>file.type.startsWith('text/') || /\.(txt|md|markdown|html?|xhtml)$/i.test(file.name);
-    const isOffice=(file:File)=>file.type.includes('officedocument') || file.type.includes('opendocument') || /\.(docx|odt)$/i.test(file.name);
+    const isOffice=(file:File)=>file.type.includes('officedocument') || file.type.includes('opendocument') || /\.(docx|pptx|odt|odp|ods)$/i.test(file.name);
     const accepted = selected.filter(file => (acceptsImages&&isImage(file))||(acceptsPdf&&isPdf(file))||(acceptsText&&isText(file))||(acceptsOffice&&isOffice(file)));
     setFiles(previous => operation.maxFiles === 1 ? accepted.slice(0, 1) : [...previous, ...accepted].slice(0, operation.maxFiles));
     setError(accepted.length !== selected.length ? `Only ${acceptsText ? 'text files' : acceptsOffice ? `${officeLabel} files` : mixedInputs ? 'PDF, JPG and PNG files' : acceptsImages ? 'JPG and PNG images' : 'PDF files'} are accepted for this operation.` : '');

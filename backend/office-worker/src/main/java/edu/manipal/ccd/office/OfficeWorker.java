@@ -28,8 +28,8 @@ public final class OfficeWorker {
             heartbeat.schedule(()->{log.error("Office worker deadline exceeded; exiting for lease recovery");System.exit(2);},90,TimeUnit.SECONDS);
             heartbeat.scheduleAtFixedRate(()->{try{if(!jobs.renew(job))leaseLost.set(true);}catch(Exception error){leaseLost.set(true);}},10,10,TimeUnit.SECONDS);
             try {
-                if(!Set.of("convert.docx_to_pdf","convert.odt_to_pdf","convert.ods_to_pdf").contains(job.operation())||job.files()!=1)throw new java.io.IOException("Unsupported office operation");
-                String extension=switch(job.operation()){case "convert.odt_to_pdf"->"odt";case "convert.ods_to_pdf"->"ods";default->"docx";};
+                if(!Set.of("convert.docx_to_pdf","convert.pptx_to_pdf","convert.odt_to_pdf","convert.odp_to_pdf","convert.ods_to_pdf").contains(job.operation())||job.files()!=1)throw new java.io.IOException("Unsupported office operation");
+                String extension=switch(job.operation()){case "convert.pptx_to_pdf"->"pptx";case "convert.odt_to_pdf"->"odt";case "convert.odp_to_pdf"->"odp";case "convert.ods_to_pdf"->"ods";default->"docx";};
                 Path input=work.resolve("source."+extension);storage.download(job.id()+"/inputs/0.bin",input);
                 Path result=OfficeOperations.convert(input,work.resolve("output"),work.resolve("profile"));if(leaseLost.get())throw new IllegalStateException("Lease lost");
                 String key=job.id()+"/outputs/"+job.lease()+".pdf";storage.upload(key,result);if(!jobs.complete(job,key))storage.delete(key);

@@ -64,9 +64,16 @@ class JobsController {
             try(var input=file.getInputStream()) {
                 byte[] header=input.readNBytes(12);
                 boolean expectsImage=operation.equals("convert.image_to_pdf")||(operation.equals("pdf.watermark_image")&&fileIndex==1);
-                boolean expectsDocx=operation.equals("convert.docx_to_pdf"),expectsOdt=operation.equals("convert.odt_to_pdf"),expectsOds=operation.equals("convert.ods_to_pdf");
-                boolean valid=textConversion?isUtf8Text(file):expectsImage?isImage(header):expectsDocx?isDocx(file):expectsOdt?isOpenDocument(file,"application/vnd.oasis.opendocument.text"):expectsOds?isOpenDocument(file,"application/vnd.oasis.opendocument.spreadsheet"):startsWith(header,"%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
-                if(!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,textConversion?"Expected valid UTF-8 text":expectsImage?"Expected a JPG or PNG image":expectsDocx?"Expected a valid DOCX package":expectsOdt?"Expected a valid ODT package":expectsOds?"Expected a valid ODS package":"Expected a PDF");
+                var officeFormat=switch(operation) {
+                    case "convert.docx_to_pdf" -> OfficePackageValidator.Format.DOCX;
+                    case "convert.pptx_to_pdf" -> OfficePackageValidator.Format.PPTX;
+                    case "convert.odt_to_pdf" -> OfficePackageValidator.Format.ODT;
+                    case "convert.odp_to_pdf" -> OfficePackageValidator.Format.ODP;
+                    case "convert.ods_to_pdf" -> OfficePackageValidator.Format.ODS;
+                    default -> null;
+                };
+                boolean valid=textConversion?isUtf8Text(file):expectsImage?isImage(header):officeFormat!=null?OfficePackageValidator.valid(file,officeFormat):startsWith(header,"%PDF-".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                if(!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,textConversion?"Expected valid UTF-8 text":expectsImage?"Expected a JPG or PNG image":officeFormat!=null?"Expected a valid "+officeFormat.name()+" package":"Expected a PDF");
             }
         }
         String owner=identities.owner(request,response,true);
@@ -149,7 +156,9 @@ class JobsController {
             case "convert.markdown_to_pdf" -> "markdown-document.pdf";
             case "convert.html_to_pdf" -> "html-document.pdf";
             case "convert.docx_to_pdf" -> "word-document.pdf";
+            case "convert.pptx_to_pdf" -> "presentation.pdf";
             case "convert.odt_to_pdf" -> "open-document.pdf";
+            case "convert.odp_to_pdf" -> "open-presentation.pdf";
             case "convert.ods_to_pdf" -> "spreadsheet.pdf";
             case "pdf.render_images" -> "rendered-pages.zip";
             case "pdf.extract_text" -> "extracted-text.txt";
@@ -183,27 +192,5 @@ class JobsController {
             java.nio.charset.StandardCharsets.UTF_8.newDecoder().onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
                 .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT).decode(java.nio.ByteBuffer.wrap(bytes));return true;
         } catch(Exception invalid) { return false; }
-    }
-    private static boolean isDocx(MultipartFile file) {
-        boolean contentTypes=false,document=false;
-        try(var zip=new java.util.zip.ZipInputStream(file.getInputStream())) {
-            for(java.util.zip.ZipEntry entry;(entry=zip.getNextEntry())!=null;) {
-                if(entry.getName().equals("[Content_Types].xml"))contentTypes=true;
-                if(entry.getName().equals("word/document.xml"))document=true;
-                if(contentTypes&&document)return true;
-            }
-        } catch(Exception invalid) { return false; }
-        return false;
-    }
-    private static boolean isOpenDocument(MultipartFile file,String expectedMime) {
-        boolean content=false,manifest=false,mimetype=false;
-        try(var zip=new java.util.zip.ZipInputStream(file.getInputStream())) {
-            for(java.util.zip.ZipEntry entry;(entry=zip.getNextEntry())!=null;) {
-                if(entry.getName().equals("content.xml"))content=true;
-                else if(entry.getName().equals("META-INF/manifest.xml"))manifest=true;
-                else if(entry.getName().equals("mimetype"))mimetype=new String(zip.readNBytes(100),java.nio.charset.StandardCharsets.US_ASCII).equals(expectedMime);
-            }
-        } catch(Exception invalid) { return false; }
-        return content&&manifest&&mimetype;
     }
 }

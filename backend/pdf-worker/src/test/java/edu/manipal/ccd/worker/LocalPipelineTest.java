@@ -148,12 +148,16 @@ class LocalPipelineTest {
         assertTrue(accepted.headers().firstValue("set-cookie").orElse("").contains("HttpOnly"));
         assertEquals(404,get(HttpClient.newHttpClient(),"/api/v1/jobs/"+id).statusCode());
         assertEquals(404,get(HttpClient.newHttpClient(),"/api/v1/jobs/"+id+"/download").statusCode());
-        await(id,"COMPLETED");
+        var completed=await(id,"COMPLETED");
         var outsider=HttpClient.newHttpClient();
         var otherGuest=HttpRequest.newBuilder(URI.create(base+"/api/v1/jobs/"+id))
             .header("Cookie","docflow_guest="+"a".repeat(64)).build();
         assertEquals(404,outsider.send(otherGuest,HttpResponse.BodyHandlers.ofByteArray()).statusCode());
         var download=get(client,"/api/v1/jobs/"+id+"/download");assertEquals(200,download.statusCode());
+        assertEquals(download.body().length,completed.path("outputSize").asLong());
+        assertEquals(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(download.body())),completed.path("outputChecksum").asText());
+        var firstPage=get(client,"/api/v1/jobs?limit=1");assertEquals(200,firstPage.statusCode());
+        assertEquals(1,JSON.readTree(firstPage.body()).size());assertTrue(firstPage.headers().firstValue("X-Next-Before").isPresent());
         try(var merged=Loader.loadPDF(download.body())) {
             assertEquals(2,merged.getNumberOfPages());
             assertEquals(org.apache.pdfbox.pdmodel.common.PDRectangle.A4.getWidth(),merged.getPage(0).getMediaBox().getWidth());
@@ -310,7 +314,7 @@ class LocalPipelineTest {
             assertTrue(isolated.claim(id,owner,initial.dispatch()).isEmpty());
             assertTrue(isolated.find(id,"another-owner").isEmpty());
             isolated.fail(attempt,true,"TEST_TRANSIENT");
-            assertFalse(isolated.complete(attempt,"stale.pdf"));
+            assertFalse(isolated.complete(attempt,"stale.pdf",1,"0".repeat(64)));
             assertFalse(isolated.pending().stream().anyMatch(j->j.id().equals(id)),"Retry must wait for backoff");
             for(int i=2;i<=3;i++) {
                 new JdbcTemplate(source).update("UPDATE merge_jobs SET retry_at=now()-interval '1 second' WHERE id=?",id);
@@ -326,7 +330,7 @@ class LocalPipelineTest {
             var stale=isolated.claim(recoverId,owner,queued.dispatch()).orElseThrow();
             new JdbcTemplate(source).update("UPDATE merge_jobs SET lease_until=now()-interval '1 second' WHERE id=?",recoverId);
             assertFalse(isolated.renew(stale));
-            assertFalse(isolated.complete(stale,"late.pdf"));
+            assertFalse(isolated.complete(stale,"late.pdf",1,"0".repeat(64)));
             isolated.recover();
             assertEquals("RETRYING",isolated.find(recoverId,owner).orElseThrow().status());
             new JdbcTemplate(source).update("UPDATE merge_jobs SET retry_at=now()-interval '1 second' WHERE id=?",recoverId);

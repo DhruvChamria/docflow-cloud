@@ -94,8 +94,8 @@ public class Worker {
                     }
                     finally { if(documentPassword!=null)java.util.Arrays.fill(documentPassword,'\0'); }
                     if(leaseLost.get()) throw new IllegalStateException("Lease lost");
-                    storage.upload(output,result);
-                    if(!jobs.complete(job,output)) storage.delete(output);else jobs.deleteSecret(job.id());
+                    var stored=storage.upload(output,result);
+                    if(!jobs.complete(job,output,stored.size(),stored.sha256())) storage.delete(output);else jobs.deleteSecret(job.id());
                     storage.queue.deleteMessage(message.getMessageId(),message.getPopReceipt());
                     log.info("PDF operation completed jobId={} operation={}",job.id(),job.operation());
                 } catch(Exception failure) {

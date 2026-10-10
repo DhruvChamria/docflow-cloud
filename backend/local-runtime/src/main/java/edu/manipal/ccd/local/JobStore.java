@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class JobStore {
     private final JdbcTemplate db;
     public record Job(UUID id, String owner, String status, int attempts, UUID dispatch,
-                      UUID lease, String output, String error, Instant expires, int files,
+                      UUID lease, String output, long outputSize, String outputChecksum, String error, Instant created, Instant expires, int files,
                       String operation,String pages,int angle,int copies,int insertAt,String pageSize,String text,
                       String position,int startNumber,int fontSize,double opacity,UUID correlation) {}
     public record Metrics(long queued,long processing,long retrying,long completed,long failed,long cancelled,
@@ -57,6 +57,8 @@ public class JobStore {
             db.execute("ALTER TABLE merge_jobs ADD COLUMN IF NOT EXISTS font_size int NOT NULL DEFAULT 12");
             db.execute("ALTER TABLE merge_jobs ADD COLUMN IF NOT EXISTS opacity double precision NOT NULL DEFAULT 0.25");
             db.execute("ALTER TABLE merge_jobs ADD COLUMN IF NOT EXISTS correlation_id uuid NOT NULL DEFAULT gen_random_uuid()");
+            db.execute("ALTER TABLE merge_jobs ADD COLUMN IF NOT EXISTS output_size bigint");
+            db.execute("ALTER TABLE merge_jobs ADD COLUMN IF NOT EXISTS output_checksum varchar(64)");
             db.execute("CREATE TABLE IF NOT EXISTS worker_heartbeat(worker_type varchar(16) PRIMARY KEY,last_seen timestamptz NOT NULL)");
             db.execute("CREATE TABLE IF NOT EXISTS job_secrets(job_id uuid PRIMARY KEY REFERENCES merge_jobs(id) ON DELETE CASCADE,ciphertext bytea NOT NULL)");
         });
@@ -64,7 +66,8 @@ public class JobStore {
     private Job map(ResultSet rs, int row) throws SQLException {
         return new Job(rs.getObject("id", UUID.class), rs.getString("owner_key"), rs.getString("status"),
             rs.getInt("attempts"), rs.getObject("dispatch_id", UUID.class), rs.getObject("lease_token", UUID.class),
-            rs.getString("output_key"), rs.getString("error_code"), rs.getTimestamp("expires_at").toInstant(),
+            rs.getString("output_key"),rs.getLong("output_size"),rs.getString("output_checksum"),rs.getString("error_code"),
+            rs.getTimestamp("created_at").toInstant(),rs.getTimestamp("expires_at").toInstant(),
             rs.getInt("file_count"),rs.getString("operation"),rs.getString("pages"),rs.getInt("angle"),rs.getInt("copies"),
             rs.getInt("insert_at"),rs.getString("page_size"),rs.getString("text_value"),rs.getString("position"),
             rs.getInt("start_number"),rs.getInt("font_size"),rs.getDouble("opacity"),rs.getObject("correlation_id",UUID.class));
@@ -136,6 +139,16 @@ public class JobStore {
     public List<Job> history(String owner) {
         return db.query("SELECT * FROM merge_jobs WHERE owner_key=? ORDER BY created_at DESC LIMIT 30", this::map, owner);
     }
+    public List<Job> history(String owner,int limit,Instant before) {
+        if(limit<1||limit>100)throw new IllegalArgumentException("History limit must be between 1 and 100");
+        return before==null
+            ? db.query("SELECT * FROM merge_jobs WHERE owner_key=? ORDER BY created_at DESC,id DESC LIMIT ?",this::map,owner,limit)
+            : db.query("SELECT * FROM merge_jobs WHERE owner_key=? AND created_at<? ORDER BY created_at DESC,id DESC LIMIT ?",this::map,owner,Timestamp.from(before),limit);
+    }
+    public int activeCount(String owner) {
+        Long count=db.queryForObject("SELECT count(*) FROM merge_jobs WHERE owner_key=? AND status IN ('CREATED','QUEUED','PROCESSING','RETRYING')",Long.class,owner);
+        return count==null?0:Math.toIntExact(count);
+    }
     public List<Job> pending() {
         db.update("UPDATE merge_jobs SET status='QUEUED' WHERE status='RETRYING' AND pending AND expires_at>now() AND retry_at<=now()");
         return db.query("SELECT * FROM merge_jobs WHERE pending AND status='QUEUED' AND expires_at>now() ORDER BY created_at LIMIT 50", this::map);
@@ -157,11 +170,12 @@ public class JobStore {
             WHERE id=? AND lease_token=? AND status='PROCESSING' AND lease_until>now()
             """, job.id(), job.lease()) == 1;
     }
-    public boolean complete(Job job, String key) {
+    public boolean complete(Job job, String key,long size,String checksum) {
+        if(size<0||checksum==null||!checksum.matches("[a-f0-9]{64}"))throw new IllegalArgumentException("Invalid result metadata");
         return db.update("""
-            UPDATE merge_jobs SET status='COMPLETED',output_key=?,lease_token=null,lease_until=null,error_code=null
+            UPDATE merge_jobs SET status='COMPLETED',output_key=?,output_size=?,output_checksum=?,lease_token=null,lease_until=null,error_code=null
             WHERE id=? AND lease_token=? AND status='PROCESSING' AND lease_until>now()
-            """, key, job.id(), job.lease()) == 1;
+            """, key,size,checksum,job.id(),job.lease()) == 1;
     }
     public void fail(Job job, boolean retryable, String code) {
         db.update("""
@@ -183,6 +197,6 @@ public class JobStore {
         return db.query("SELECT * FROM merge_jobs WHERE expires_at<=now() AND status<>'PROCESSING' AND status<>'EXPIRED' LIMIT 50", this::map);
     }
     public void expire(Job job) {
-        db.update("UPDATE merge_jobs SET status='EXPIRED',pending=false,output_key=null WHERE id=? AND status<>'PROCESSING' AND expires_at<=now()", job.id());
+        db.update("UPDATE merge_jobs SET status='EXPIRED',pending=false,output_key=null,output_size=null,output_checksum=null WHERE id=? AND status<>'PROCESSING' AND expires_at<=now()", job.id());
     }
 }

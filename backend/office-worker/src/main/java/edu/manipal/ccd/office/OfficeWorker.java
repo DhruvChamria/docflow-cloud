@@ -32,7 +32,7 @@ public final class OfficeWorker {
                 String extension=switch(job.operation()){case "convert.pptx_to_pdf"->"pptx";case "convert.odt_to_pdf"->"odt";case "convert.odp_to_pdf"->"odp";case "convert.ods_to_pdf"->"ods";default->"docx";};
                 Path input=work.resolve("source."+extension);storage.download(job.id()+"/inputs/0.bin",input);
                 Path result=OfficeOperations.convert(input,work.resolve("output"),work.resolve("profile"));if(leaseLost.get())throw new IllegalStateException("Lease lost");
-                String key=job.id()+"/outputs/"+job.lease()+".pdf";storage.upload(key,result);if(!jobs.complete(job,key))storage.delete(key);
+                String key=job.id()+"/outputs/"+job.lease()+".pdf";var stored=storage.upload(key,result);if(!jobs.complete(job,key,stored.size(),stored.sha256()))storage.delete(key);
                 storage.officeQueue.deleteMessage(message.getMessageId(),message.getPopReceipt());log.info("Office conversion completed jobId={}",job.id());
             } catch(java.io.IOException invalid) {
                 jobs.fail(job,false,"INVALID_OR_UNSUPPORTED_DOCUMENT");storage.officeQueue.deleteMessage(message.getMessageId(),message.getPopReceipt());

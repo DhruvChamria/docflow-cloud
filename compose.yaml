@@ -35,6 +35,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       STORAGE_CONNECTION: &storage-connection 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;'
       APP_DOCUMENT_SECRET_FILE: /run/secrets/document.key
+      APP_JOBS_MAX_ACTIVE_PER_OWNER: ${APP_JOBS_MAX_ACTIVE_PER_OWNER:-5}
+      APP_RATE_LIMIT_JOB_MUTATIONS_PER_MINUTE: ${APP_RATE_LIMIT_JOB_MUTATIONS_PER_MINUTE:-120}
+      APP_RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE: ${APP_RATE_LIMIT_AUTH_ATTEMPTS_PER_MINUTE:-30}
     volumes: ["document-secret:/run/secrets:ro"]
     depends_on:
       secret-init:

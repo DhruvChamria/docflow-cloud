@@ -3,7 +3,7 @@ import edu.manipal.ccd.local.*;
 import org.springframework.context.annotation.*;
 import org.springframework.core.env.Environment;
 @Configuration
-@Profile("local")
+@Profile({"local","cloud"})
 class LocalConfiguration {
     @Bean JobStore jobs(Environment env) {
         return new JobStore(env.getRequiredProperty("DB_URL"),env.getRequiredProperty("DB_USER"),env.getRequiredProperty("DB_PASSWORD"));
@@ -12,7 +12,10 @@ class LocalConfiguration {
     @Bean AccountStore accounts(Environment env) {
         return new AccountStore(env.getRequiredProperty("DB_URL"),env.getRequiredProperty("DB_USER"),env.getRequiredProperty("DB_PASSWORD"));
     }
-    @Bean SecretBox documentSecrets(Environment env) { return new SecretBox(java.nio.file.Path.of(env.getRequiredProperty("APP_DOCUMENT_SECRET_FILE"))); }
+    @Bean SecretBox documentSecrets(Environment env) {
+        String inline=env.getProperty("APP_DOCUMENT_SECRET");
+        return inline!=null&&!inline.isBlank()?new SecretBox(inline):new SecretBox(java.nio.file.Path.of(env.getRequiredProperty("APP_DOCUMENT_SECRET_FILE")));
+    }
     @Bean org.springframework.boot.actuate.health.HealthIndicator database(JobStore jobs) {
         return ()->{try { return jobs.healthy()?org.springframework.boot.actuate.health.Health.up().build():org.springframework.boot.actuate.health.Health.down().build(); }
             catch(Exception error) { return org.springframework.boot.actuate.health.Health.down().build(); }};

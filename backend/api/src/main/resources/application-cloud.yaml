@@ -1,0 +1,12 @@
+management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,database,storageDependency
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false

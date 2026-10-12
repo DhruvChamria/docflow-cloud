@@ -11,10 +11,13 @@ import org.springframework.stereotype.Component;
 
 /** Low-cardinality, database-backed metrics shared by API and worker state. */
 @Component
-@Profile("local")
+@Profile({"local","cloud"})
 class JobMetrics {
-    private static final List<String> OPERATIONS=List.of("pdf.merge","pdf.extract","pdf.rotate","pdf.reorder","pdf.delete",
-        "pdf.duplicate_pages","pdf.insert_blank","pdf.page_numbers","pdf.watermark_text");
+    private static final List<String> OPERATIONS=List.of(
+        "pdf.merge","pdf.split","pdf.extract","pdf.delete","pdf.reorder","pdf.rotate","pdf.duplicate_pages","pdf.insert_blank","pdf.page_numbers",
+        "pdf.watermark_text","pdf.watermark_image","pdf.render_images","pdf.extract_text","pdf.metadata_read","pdf.metadata_update","pdf.metadata_remove",
+        "pdf.protect","pdf.unlock","pdf.optimize","pdf.compress","convert.image_to_pdf","convert.text_to_pdf","convert.markdown_to_pdf","convert.html_to_pdf",
+        "convert.docx_to_pdf","convert.pptx_to_pdf","convert.odt_to_pdf","convert.odp_to_pdf","convert.ods_to_pdf");
     private final JobStore jobs;
     private final Map<String,AtomicLong> status=new HashMap<>(),submitted=new HashMap<>(),completed=new HashMap<>(),failed=new HashMap<>(),retriesByOperation=new HashMap<>();
     private final AtomicLong queueDepth=new AtomicLong(),retries=new AtomicLong(),poison=new AtomicLong(),workerActive=new AtomicLong();
@@ -30,7 +33,7 @@ class JobMetrics {
             submitted.put(operation,gauge(registry,"docflow_jobs_submitted_total",operation));
             completed.put(operation,gauge(registry,"docflow_jobs_completed_total",operation));
             failed.put(operation,gauge(registry,"docflow_jobs_failed_total",operation));
-            retriesByOperation.put(operation,gauge(registry,"docflow_job_retries_total",operation));
+            retriesByOperation.put(operation,gauge(registry,"docflow_operation_retries",operation));
         }
         Gauge.builder("docflow_queue_depth",queueDepth,AtomicLong::get).tag("worker_type","pdf").register(registry);
         Gauge.builder("docflow_job_retries",retries,AtomicLong::get).register(registry);

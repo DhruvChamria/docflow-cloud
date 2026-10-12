@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
-@Profile("local")
+@Profile({"local","cloud"})
 @RequestMapping("/api/v1/auth")
 class AuthController {
     private static final Pattern EMAIL=Pattern.compile("^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,63}$",Pattern.CASE_INSENSITIVE);

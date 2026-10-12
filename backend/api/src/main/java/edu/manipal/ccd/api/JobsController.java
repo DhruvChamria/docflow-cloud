@@ -12,7 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 @RestController
-@Profile("local")
+@Profile({"local","cloud"})
 @RequestMapping("/api/v1")
 class JobsController {
     private final JobStore jobs; private final Storage storage; private final Identity identities;private final SecretBox secrets;private final int maxActiveJobs;

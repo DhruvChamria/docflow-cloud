@@ -7,16 +7,21 @@ import java.security.*;
 import java.time.*;
 import java.util.*;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
 @Component
-@Profile("local")
+@Profile({"local","cloud"})
 class Identity {
     static final String SESSION="docflow_session";
     private static final SecureRandom RANDOM=new SecureRandom();
-    private final GuestIdentity guests;private final AccountStore accounts;
-    Identity(GuestIdentity guests,AccountStore accounts){this.guests=guests;this.accounts=accounts;}
+    private final GuestIdentity guests;private final AccountStore accounts;private final boolean secureCookie;private final String sameSite;
+    Identity(GuestIdentity guests,AccountStore accounts,Environment environment){
+        this.guests=guests;this.accounts=accounts;
+        this.secureCookie=Boolean.parseBoolean(environment.getProperty("APP_COOKIE_SECURE","false"));
+        this.sameSite=environment.getProperty("APP_COOKIE_SAME_SITE","Strict");
+    }
     void checkMutation(HttpServletRequest request){guests.checkMutation(request);}
     Optional<AccountStore.Account> account(HttpServletRequest request){
         String token=cookie(request,SESSION);return token==null?Optional.empty():accounts.session(digest(token));
@@ -31,11 +36,11 @@ class Identity {
     void login(AccountStore.Account account,HttpServletResponse response){
         byte[] bytes=new byte[32];RANDOM.nextBytes(bytes);String token=HexFormat.of().formatHex(bytes);Instant expires=Instant.now().plus(Duration.ofDays(7));
         accounts.createSession(account.id(),digest(token),expires);response.addHeader("Set-Cookie",ResponseCookie.from(SESSION,token).httpOnly(true)
-            .secure(false).sameSite("Strict").path("/api").maxAge(Duration.ofDays(7)).build().toString());
+            .secure(secureCookie).sameSite(sameSite).path("/api").maxAge(Duration.ofDays(7)).build().toString());
     }
     void logout(HttpServletRequest request,HttpServletResponse response){
         String token=cookie(request,SESSION);if(token!=null) accounts.invalidate(digest(token));
-        response.addHeader("Set-Cookie",ResponseCookie.from(SESSION,"").httpOnly(true).secure(false).sameSite("Strict").path("/api").maxAge(Duration.ZERO).build().toString());
+        response.addHeader("Set-Cookie",ResponseCookie.from(SESSION,"").httpOnly(true).secure(secureCookie).sameSite(sameSite).path("/api").maxAge(Duration.ZERO).build().toString());
     }
     private static String cookie(HttpServletRequest request,String name){
         if(request.getCookies()!=null) for(var cookie:request.getCookies()) if(cookie.getName().equals(name)&&cookie.getValue().matches("[a-f0-9]{64}")) return cookie.getValue();

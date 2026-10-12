@@ -14,11 +14,19 @@ public final class SecretBox {
     private static final byte VERSION=1;private static final int IV_BYTES=12;
     private final SecretKeySpec key;private final SecureRandom random=new SecureRandom();
     public SecretBox(Path keyFile) {
+        this(readKey(keyFile));
+    }
+    public SecretBox(String encodedKey) {
         try {
-            byte[] decoded=java.util.Base64.getMimeDecoder().decode(Files.readString(keyFile).trim());
+            byte[] decoded=java.util.Base64.getMimeDecoder().decode(encodedKey.trim());
             if(decoded.length!=32)throw new IllegalArgumentException("Document secret key must contain 32 bytes");
             key=new SecretKeySpec(decoded,"AES");
+            Arrays.fill(decoded,(byte)0);
         } catch(Exception invalid) { throw new IllegalStateException("Cannot load document secret key",invalid); }
+    }
+    private static String readKey(Path keyFile) {
+        try { return Files.readString(keyFile); }
+        catch(Exception invalid) { throw new IllegalStateException("Cannot load document secret key",invalid); }
     }
     public byte[] encrypt(char[] value) {
         ByteBuffer encoded=java.nio.charset.StandardCharsets.UTF_8.encode(CharBuffer.wrap(value));

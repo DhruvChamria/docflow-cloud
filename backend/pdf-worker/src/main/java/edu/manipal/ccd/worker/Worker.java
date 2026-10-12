@@ -18,7 +18,8 @@ public class Worker {
     public static void main(String[] args) throws Exception {
         var jobs=new JobStore(env("DB_URL"),env("DB_USER"),env("DB_PASSWORD"));
         var storage=new Storage(env("STORAGE_CONNECTION"));
-        var secrets=new SecretBox(Path.of(env("APP_DOCUMENT_SECRET_FILE")));
+        String inlineSecret=System.getenv("APP_DOCUMENT_SECRET");
+        var secrets=inlineSecret!=null&&!inlineSecret.isBlank()?new SecretBox(inlineSecret):new SecretBox(Path.of(env("APP_DOCUMENT_SECRET_FILE")));
         var json=new ObjectMapper();
         var cleanup=new ExpiryCleanup(jobs,storage::deletePrefix);
         while (true) {

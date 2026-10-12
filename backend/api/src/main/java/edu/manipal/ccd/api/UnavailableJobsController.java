@@ -4,7 +4,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 @RestController
-@Profile("!local")
+@Profile("!local & !cloud")
 class UnavailableJobsController {
     @PostMapping("/api/v1/jobs") void submit() {
         throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,"Start the local profile with its database, storage and worker.");

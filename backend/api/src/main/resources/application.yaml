@@ -8,12 +8,16 @@ spring:
     multipart:
       max-file-size: 25MB
       max-request-size: 100MB
+  web:
+    resources:
+      static-locations: classpath:/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/,file:/app/static/
 server:
   address: ${API_BIND_ADDRESS:127.0.0.1}
   port: ${API_PORT:8080}
   error:
     include-stacktrace: never
     include-message: never
+  forward-headers-strategy: framework
 management:
   endpoints:
     web:

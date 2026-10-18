@@ -1,0 +1,5 @@
+subscription_id   = "00000000-0000-0000-0000-000000000000"
+budget_alert_email = "student@example.com"
+location           = "centralindia"
+deploy_apps        = false
+image_tag          = "dev"

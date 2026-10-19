@@ -4,7 +4,7 @@ import java.net.URI;
 import java.net.http.*;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext;
+import org.springframework.boot.web.server.servlet.context.ServletWebServerApplicationContext;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ApiContractTest {
@@ -36,5 +36,8 @@ class ApiContractTest {
         assertEquals(501, result.statusCode());
         assertTrue(result.headers().firstValue("content-type").orElse("").contains("application/problem+json"));
         assertTrue(result.headers().firstValue("X-Correlation-Id").isPresent());
+    }
+    @Test void localConfigurationProvidesJacksonTwoMapperForJobMessages() {
+        assertNotNull(new LocalConfiguration().jobMessageMapper());
     }
 }

@@ -27,10 +27,10 @@ variable "budget_alert_email" {
   sensitive   = true
 }
 
-variable "budget_amount_usd" {
-  description = "Resource-group budget in USD for the short-lived evaluation environment."
+variable "budget_amount" {
+  description = "Resource-group budget in the subscription billing currency (INR for this Azure for Students subscription)."
   type        = number
-  default     = 10
+  default     = 800
 }
 
 variable "budget_start_date" {
@@ -55,6 +55,13 @@ variable "image_tag" {
   description = "Immutable image tag shared by the API and worker images."
   type        = string
   default     = "dev"
+}
+
+variable "api_image_tag" {
+  description = "Optional immutable API-only tag for a frontend or API hotfix; defaults to image_tag."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "postgresql_sku_name" {

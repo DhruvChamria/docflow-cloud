@@ -1,9 +1,10 @@
 resource "azurerm_container_app" "api" {
   count                        = var.deploy_apps ? 1 : 0
   name                         = "ca-${var.name_prefix}-api-${local.suffix}"
-  container_app_environment_id = azurerm_container_app_environment.main.id
+  container_app_environment_id = azapi_resource.container_app_environment.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
@@ -17,19 +18,16 @@ resource "azurerm_container_app" "api" {
   }
 
   secret {
-    name                = "database-password"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.database_password.versionless_id
+    name  = "database-password"
+    value = azurerm_key_vault_secret.database_password.value
   }
   secret {
-    name                = "storage-connection"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.storage_connection.versionless_id
+    name  = "storage-connection"
+    value = azurerm_key_vault_secret.storage_connection.value
   }
   secret {
-    name                = "document-key"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.document_key.versionless_id
+    name  = "document-key"
+    value = azurerm_key_vault_secret.document_key.value
   }
 
   ingress {
@@ -53,13 +51,17 @@ resource "azurerm_container_app" "api" {
 
     container {
       name   = "api"
-      image  = "${azurerm_container_registry.main.login_server}/docflow-api:${var.image_tag}"
+      image  = "${azurerm_container_registry.main.login_server}/docflow-api:${coalesce(var.api_image_tag, var.image_tag)}"
       cpu    = 0.5
       memory = "1Gi"
 
       env {
         name  = "SPRING_PROFILES_ACTIVE"
         value = "cloud"
+      }
+      env {
+        name  = "API_BIND_ADDRESS"
+        value = "0.0.0.0"
       }
       env {
         name  = "DB_URL"
@@ -106,9 +108,10 @@ resource "azurerm_container_app" "api" {
 resource "azurerm_container_app" "pdf_worker" {
   count                        = var.deploy_apps ? 1 : 0
   name                         = "ca-${var.name_prefix}-pdf-${local.suffix}"
-  container_app_environment_id = azurerm_container_app_environment.main.id
+  container_app_environment_id = azapi_resource.container_app_environment.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
@@ -122,32 +125,26 @@ resource "azurerm_container_app" "pdf_worker" {
   }
 
   secret {
-    name                = "database-password"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.database_password.versionless_id
+    name  = "database-password"
+    value = azurerm_key_vault_secret.database_password.value
   }
   secret {
-    name                = "storage-connection"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.storage_connection.versionless_id
+    name  = "storage-connection"
+    value = azurerm_key_vault_secret.storage_connection.value
   }
   secret {
-    name                = "document-key"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.document_key.versionless_id
+    name  = "document-key"
+    value = azurerm_key_vault_secret.document_key.value
   }
 
   template {
     min_replicas = 0
     max_replicas = 3
 
-    custom_scale_rule {
-      name             = "pdf-queue"
-      custom_rule_type = "azure-queue"
-      metadata = {
-        queueName   = azurerm_storage_queue.pdf_jobs.name
-        queueLength = "1"
-      }
+    azure_queue_scale_rule {
+      name         = "pdf-queue"
+      queue_name   = azurerm_storage_queue.pdf_jobs.name
+      queue_length = 1
       authentication {
         secret_name       = "storage-connection"
         trigger_parameter = "connection"
@@ -197,9 +194,10 @@ resource "azurerm_container_app" "pdf_worker" {
 resource "azurerm_container_app" "office_worker" {
   count                        = var.deploy_apps ? 1 : 0
   name                         = "ca-${var.name_prefix}-office-${local.suffix}"
-  container_app_environment_id = azurerm_container_app_environment.main.id
+  container_app_environment_id = azapi_resource.container_app_environment.id
   resource_group_name          = azurerm_resource_group.main.name
   revision_mode                = "Single"
+  workload_profile_name        = "Consumption"
   tags                         = local.tags
 
   identity {
@@ -213,27 +211,22 @@ resource "azurerm_container_app" "office_worker" {
   }
 
   secret {
-    name                = "database-password"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.database_password.versionless_id
+    name  = "database-password"
+    value = azurerm_key_vault_secret.database_password.value
   }
   secret {
-    name                = "storage-connection"
-    identity            = azurerm_user_assigned_identity.apps.id
-    key_vault_secret_id = azurerm_key_vault_secret.storage_connection.versionless_id
+    name  = "storage-connection"
+    value = azurerm_key_vault_secret.storage_connection.value
   }
 
   template {
     min_replicas = 0
     max_replicas = 2
 
-    custom_scale_rule {
-      name             = "office-queue"
-      custom_rule_type = "azure-queue"
-      metadata = {
-        queueName   = azurerm_storage_queue.office_jobs.name
-        queueLength = "1"
-      }
+    azure_queue_scale_rule {
+      name         = "office-queue"
+      queue_name   = azurerm_storage_queue.office_jobs.name
+      queue_length = 1
       authentication {
         secret_name       = "storage-connection"
         trigger_parameter = "connection"

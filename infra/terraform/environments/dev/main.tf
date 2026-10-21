@@ -37,7 +37,7 @@ resource "azurerm_resource_group" "main" {
 resource "azurerm_consumption_budget_resource_group" "main" {
   name              = "${var.name_prefix}-evaluation-budget"
   resource_group_id = azurerm_resource_group.main.id
-  amount            = var.budget_amount_usd
+  amount            = var.budget_amount
   time_grain        = "Monthly"
 
   time_period {
@@ -66,12 +66,32 @@ resource "azurerm_log_analytics_workspace" "main" {
   tags                = local.tags
 }
 
-resource "azurerm_container_app_environment" "main" {
-  name                       = "cae-${var.name_prefix}-dev-${local.suffix}"
-  location                   = azurerm_resource_group.main.location
-  resource_group_name        = azurerm_resource_group.main.name
-  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
-  tags                       = local.tags
+resource "azapi_resource" "container_app_environment" {
+  type                      = "Microsoft.App/managedEnvironments@2026-07-01"
+  name                      = "cae-${var.name_prefix}-standard-dev-${local.suffix}"
+  parent_id                 = azurerm_resource_group.main.id
+  location                  = azurerm_resource_group.main.location
+  tags                      = local.tags
+  schema_validation_enabled = false
+
+  body = {
+    properties = {
+      environmentMode = "WorkloadProfiles"
+      appLogsConfiguration = {
+        destination = "log-analytics"
+        logAnalyticsConfiguration = {
+          customerId = azurerm_log_analytics_workspace.main.workspace_id
+          sharedKey  = azurerm_log_analytics_workspace.main.primary_shared_key
+        }
+      }
+      workloadProfiles = [
+        {
+          name                = "Consumption"
+          workloadProfileType = "Consumption"
+        }
+      ]
+    }
+  }
 }
 
 resource "azurerm_container_registry" "main" {
@@ -121,13 +141,13 @@ resource "azurerm_storage_container" "documents" {
 }
 
 resource "azurerm_storage_queue" "pdf_jobs" {
-  name                 = "pdf-jobs"
-  storage_account_name = azurerm_storage_account.main.name
+  name               = "pdf-jobs"
+  storage_account_id = azurerm_storage_account.main.id
 }
 
 resource "azurerm_storage_queue" "office_jobs" {
-  name                 = "office-jobs"
-  storage_account_name = azurerm_storage_account.main.name
+  name               = "office-jobs"
+  storage_account_id = azurerm_storage_account.main.id
 }
 
 resource "azurerm_storage_management_policy" "documents" {
@@ -175,6 +195,10 @@ resource "azurerm_postgresql_flexible_server" "main" {
   geo_redundant_backup_enabled  = false
   auto_grow_enabled             = false
   tags                          = local.tags
+
+  lifecycle {
+    ignore_changes = [zone]
+  }
 }
 
 resource "azurerm_postgresql_flexible_server_firewall_rule" "azure_services" {

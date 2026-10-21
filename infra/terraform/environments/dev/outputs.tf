@@ -11,7 +11,7 @@ output "container_registry_login_server" {
 }
 
 output "api_url" {
-  value = var.deploy_apps ? "https://${azurerm_container_app.api[0].latest_revision_fqdn}" : null
+  value = var.deploy_apps ? "https://${azurerm_container_app.api[0].ingress[0].fqdn}" : null
 }
 
 output "teardown_command" {

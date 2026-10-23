@@ -2,8 +2,9 @@
 
 This Terraform root creates the short-lived DocFlow Cloud evaluation environment. It uses
 one region and one resource group, an Azure Container Registry Basic instance, Storage
-Blob/Queue, PostgreSQL Flexible Server `B1ms`, Key Vault, Log Analytics, a Consumption
-Container Apps environment, and a USD 10 resource-group budget with four alerts.
+Blob/Queue, PostgreSQL Flexible Server `B1ms`, Key Vault, Log Analytics, a Workload Profiles
+Container Apps environment using its built-in Consumption profile, and an INR 800
+resource-group budget with four alerts.
 
 Deployment is intentionally two-stage because Container Apps cannot pull images before the
 registry exists:

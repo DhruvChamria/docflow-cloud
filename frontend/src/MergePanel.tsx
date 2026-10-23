@@ -118,7 +118,7 @@ export function MergePanel({ operations }: { operations: Operation[] }) {
             onChange={event => setParameters(previous => ({ ...previous, [parameter.name]: event.target.value }))} />}</label>
       <p className="hint">{parameter.help}</p>
     </div>)}
-    <p>Local development only: use non-sensitive test documents. No login required; this browser session owns its jobs.</p>
+    <p>Use non-sensitive test documents. No login required; this browser session owns its jobs.</p>
     <div className={`drop-zone ${dragging ? 'dragging' : ''}`} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
       onDrop={event => { event.preventDefault(); setDragging(false); addFiles(Array.from(event.dataTransfer.files)); }}>
       <label className="picker">Choose {acceptsText ? 'text' : acceptsOffice ? officeLabel : mixedInputs ? 'PDF and image' : acceptsImages ? 'image' : 'PDF'} files <input type="file" accept={acceptAttribute} multiple={operation.maxFiles > 1} disabled={busy}

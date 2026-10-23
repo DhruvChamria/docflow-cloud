@@ -40,7 +40,7 @@ export function App() {
       <h1>Everyday document tools.<br/><em>A cloud-native foundation.</em></h1>
       <p>Merge PDFs, extract pages and convert documents through a shared asynchronous processing platform.</p>
     </section>
-    <aside><strong>Local development preview</strong><p>{operations.filter(op => op.available).length || 'Multiple'} document tools are connected to asynchronous workers. Guest use requires no login; optional accounts provide persistent history. Office conversions use a separate LibreOffice worker. Use ordinary test files: advanced forms, bookmarks and digital signatures are not guaranteed to survive editing.</p></aside>
+    <aside><strong>Deployment status</strong><p>{operations.filter(op => op.available).length || 'Multiple'} document tools are connected to asynchronous workers. Guest use requires no login; optional accounts provide persistent history. Office conversions use a separate LibreOffice worker. Use ordinary test files: advanced forms, bookmarks and digital signatures are not guaranteed to survive editing.</p></aside>
     <AuthPanel />
     {operations.some(op => op.code === 'pdf.merge' && op.available) && <MergePanel operations={operations.filter(op => op.available)} />}
     <section aria-labelledby="tools"><div className="section-title"><h2 id="tools">Operation catalogue</h2><span role="status">{status}</span></div>
@@ -48,9 +48,9 @@ export function App() {
       <div className="grid">{operations.map((op, index) => <article key={op.code}>
         <span className="number">0{index + 1}</span><h3>{op.label}</h3>
         <p>Up to {op.maxFiles} {op.maxFiles === 1 ? 'file' : 'files'} per job.</p>
-        <span className="badge">{op.available ? 'Available locally' : 'Planned · not available yet'}</span>
+        <span className="badge">{op.available ? 'Available' : 'Planned · not available yet'}</span>
       </article>)}</div>
     </section>
-    <footer>Cloud Native Document Conversion and PDF Processing Platform<br/>Local development · No cloud resources provisioned</footer>
+    <footer>Cloud Native Document Conversion and PDF Processing Platform<br/>Asynchronous processing · Guest access supported</footer>
   </main>;
 }

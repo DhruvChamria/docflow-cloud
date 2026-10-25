@@ -116,6 +116,8 @@ resource "azurerm_role_assignment" "acr_pull" {
   principal_id         = azurerm_user_assigned_identity.apps.principal_id
 }
 
+# The evaluation deployment uses public Container Apps and shared-key storage access.
+#trivy:ignore:AVD-AZU-0012:exp:2026-10-29
 resource "azurerm_storage_account" "main" {
   name                            = "st${var.name_prefix}${local.suffix}"
   resource_group_name             = azurerm_resource_group.main.name
@@ -215,6 +217,8 @@ resource "azurerm_postgresql_flexible_server_database" "main" {
   collation = "en_US.utf8"
 }
 
+# Terraform provisions the short-lived lab vault from the developer workstation.
+#trivy:ignore:AVD-AZU-0013:exp:2026-10-29
 resource "azurerm_key_vault" "main" {
   name                       = "kv-${var.name_prefix}-${local.suffix}"
   location                   = azurerm_resource_group.main.location

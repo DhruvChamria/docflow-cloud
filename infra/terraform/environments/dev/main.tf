@@ -23,7 +23,7 @@ locals {
     environment        = "dev"
     owner              = "DhruvChamria"
     managed-by         = "terraform"
-    expiry-review-date = "2026-10-29"
+    expiry-review-date = "2026-11-30"
   }
   database_url = "jdbc:postgresql://${azurerm_postgresql_flexible_server.main.fqdn}:5432/${azurerm_postgresql_flexible_server_database.main.name}?sslmode=require"
 }
@@ -117,7 +117,7 @@ resource "azurerm_role_assignment" "acr_pull" {
 }
 
 # The evaluation deployment uses public Container Apps and shared-key storage access.
-#trivy:ignore:AVD-AZU-0012:exp:2026-10-29
+#trivy:ignore:AVD-AZU-0012:exp:2026-11-30
 resource "azurerm_storage_account" "main" {
   name                            = "st${var.name_prefix}${local.suffix}"
   resource_group_name             = azurerm_resource_group.main.name
@@ -218,7 +218,7 @@ resource "azurerm_postgresql_flexible_server_database" "main" {
 }
 
 # Terraform provisions the short-lived lab vault from the developer workstation.
-#trivy:ignore:AVD-AZU-0013:exp:2026-10-29
+#trivy:ignore:AVD-AZU-0013:exp:2026-11-30
 resource "azurerm_key_vault" "main" {
   name                       = "kv-${var.name_prefix}-${local.suffix}"
   location                   = azurerm_resource_group.main.location

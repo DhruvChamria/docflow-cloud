@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion><parent><groupId>edu.manipal.ccd</groupId><artifactId>docflow</artifactId><version>0.1.0-SNAPSHOT</version></parent><artifactId>pdf-worker</artifactId><dependencies>
 <dependency><groupId>edu.manipal.ccd</groupId><artifactId>local-runtime</artifactId><version>${project.version}</version></dependency>
 <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter</artifactId></dependency>
-<dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.7</version></dependency>
+<dependency><groupId>org.apache.pdfbox</groupId><artifactId>pdfbox</artifactId><version>3.0.8</version></dependency>
 <dependency><groupId>org.jsoup</groupId><artifactId>jsoup</artifactId><version>1.23.2</version></dependency>
 <dependency><groupId>com.vladsch.flexmark</groupId><artifactId>flexmark</artifactId><version>0.64.8</version></dependency>
 <dependency><groupId>io.github.openhtmltopdf</groupId><artifactId>openhtmltopdf-pdfbox</artifactId><version>1.1.86</version></dependency>
